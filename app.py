@@ -1,16 +1,48 @@
 from flask import Flask, render_template, json, request
-from flask.ext.mysql import MySQL
+from flaskext.mysql import MySQL
 from werkzeug import generate_password_hash, check_password_hash
+from sqlalchemy import Column, String,create_engine, Integer, Table, MetaData, ForeignKey
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.declarative import declarative_base
 
-mysql = MySQL()
 app = Flask(__name__)
+Base = declarative_base()
 
-# MySQL configurations
-app.config['MYSQL_DATABASE_USER'] = 'jay'
-app.config['MYSQL_DATABASE_PASSWORD'] = 'jay'
-app.config['MYSQL_DATABASE_DB'] = 'BucketList'
-app.config['MYSQL_DATABASE_HOST'] = 'localhost'
-mysql.init_app(app)
+
+class User(Base):  
+    __tablename__ = "user"  
+      
+    id = Column("id", Integer, primary_key=True)  
+    name = Column("name", String)  
+    password = Column("password", String)  
+      
+      
+    def __init__(self, id=None, name=None,  password=None):  
+        self.id = id  
+        self.name = name  
+        self.password = password  
+     
+          
+    def __repr__(self):  
+        return "<User '{name}' '{password}' >".format(name=self.name,  password=self.password)  
+
+
+
+
+engine = create_engine('mysql+pymysql://testuser:password@localhost:3306/BucketList')
+
+metadata = MetaData(engine)
+
+user=Table('user',metadata,
+    Column('id',Integer,primary_key=True),
+    Column('name',String(20)),
+    Column('password',String(40)),
+    )
+
+
+metadata.create_all()
+Session = sessionmaker(bind=engine)
+session = Session()
 
 
 @app.route('/')
@@ -22,37 +54,54 @@ def showSignUp():
     return render_template('signup.html')
 
 
+@app.route('/login',methods=['POST'])
+def login():
+
+		_name = request.form['inputName']
+		_password = request.form['inputPassword']
+
+		users = session.query(User).filter(User.name == _name).all()
+
+		if len(users) is 0:
+
+			return json.dumps({'message':'user %s not exist !' % _name})
+
+		else:
+
+			user = users[0]
+
+			if user.password == _password:
+				return json.dumps({'message': 'welcome %s !' % _name})
+			else:
+				return json.dumps({'message': 'password  not match !'})
+
+
+
+
+
 @app.route('/signUp',methods=['POST','GET'])
 def signUp():
-    try:
-        _name = request.form['inputName']
-        _email = request.form['inputEmail']
-        _password = request.form['inputPassword']
 
-        # validate the received values
-        if _name and _email and _password:
-            
-            # All Good, let's call MySQL
-            
-            conn = mysql.connect()
-            cursor = conn.cursor()
-            _hashed_password = generate_password_hash(_password)
-            cursor.callproc('sp_createUser',(_name,_email,_hashed_password))
-            data = cursor.fetchall()
+		_name = request.form['inputName']
+		_password = request.form['inputPassword']
+		if _name and _password:
+			_hashed_password=_password
+			data = session.query(User).filter(User.name == _name).all()
 
-            if len(data) is 0:
-                conn.commit()
-                return json.dumps({'message':'User created successfully !'})
-            else:
-                return json.dumps({'error':str(data[0])})
-        else:
-            return json.dumps({'html':'<span>Enter the required fields</span>'})
+			all_users=session.query(User).all()
 
-    except Exception as e:
-        return json.dumps({'error':str(e)})
-    finally:
-        cursor.close() 
-        conn.close()
+			if len(data) is 0:
+				user1 = User(len(all_users) + 1 ,_name,_hashed_password)
+				session.add(user1)
+				session.commit()
+				return json.dumps({'message':'User created successfully !'})
+			else:
+				return json.dumps({'message':'User %s already exist !' % _name})
+		else:
+			return json.dumps({'html':'<span>Enter the required fields</span>'})
+
+
+
 
 if __name__ == "__main__":
     app.run(port=5002)
