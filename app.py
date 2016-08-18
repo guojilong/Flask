@@ -71,7 +71,8 @@ def login():
 			user = users[0]
 
 			if user.password == _password:
-				return json.dumps({'message': 'welcome %s !' % _name})
+				#return json.dumps({'message': 'welcome %s !' % _name})
+				return render_template("welcome.html",title = user.name , user = user)
 			else:
 				return json.dumps({'message': 'password  not match !'})
 
